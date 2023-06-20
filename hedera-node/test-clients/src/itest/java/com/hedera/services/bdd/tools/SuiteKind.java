@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package com.hedera.services.bdd.suites;
+package com.hedera.services.bdd.tools;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-
-/** Used in BDD suites to mark methods that produce one or more `HapiSpecs` whose
- * name does not match this method's name.
- */
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
-public @interface BddTestNameDoesNotMatchMethodName {}
+public enum SuiteKind {
+    all,
+    prerequisite,
+    sequential,
+    concurrent,
+    concurrentetherium,
+    e2e,
+    e2eunused,
+    e2epackagerunner,
+    suiterunner
+}

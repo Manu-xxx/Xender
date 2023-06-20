@@ -16,7 +16,6 @@
 
 package com.hedera.services.bdd.suites.regression;
 
-import static com.hedera.node.app.hapi.utils.keys.Ed25519Utils.relocatedIfNotPresentInWorkingDir;
 import static com.hedera.services.bdd.spec.HapiSpec.defaultHapiSpec;
 import static com.hedera.services.bdd.spec.assertions.AccountDetailsAsserts.accountDetailsWith;
 import static com.hedera.services.bdd.spec.assertions.AccountInfoAsserts.changeFromSnapshot;
@@ -37,11 +36,14 @@ import static com.hedera.services.bdd.spec.utilops.UtilVerbs.withOpContext;
 import static com.hedera.services.bdd.suites.records.RecordCreationSuite.STAKING_FEES_NODE_REWARD_PERCENTAGE;
 import static com.hedera.services.bdd.suites.records.RecordCreationSuite.STAKING_FEES_STAKING_REWARD_PERCENTAGE;
 
+import com.hedera.node.app.hapi.utils.ResourceLocator;
 import com.hedera.node.app.hapi.utils.fee.FeeObject;
 import com.hedera.services.bdd.spec.HapiSpec;
 import com.hedera.services.bdd.spec.HapiSpecOperation;
 import com.hedera.services.bdd.spec.assertions.AccountInfoAsserts;
 import com.hedera.services.bdd.suites.HapiSuite;
+import com.hedera.services.bdd.suites.tools.annotation.BddPrerequisiteSpec;
+import com.hedera.services.bdd.suites.tools.annotation.BddPrerequisiteSpec.Scope;
 import com.hedera.services.bdd.suites.utils.sysfiles.serdes.StandardSerdes;
 import com.hederahashgraph.api.proto.java.Key;
 import com.hederahashgraph.api.proto.java.KeyList;
@@ -71,6 +73,7 @@ public class TargetNetworkPrep extends HapiSuite {
         return List.of(ensureSystemStateAsExpectedWithSystemDefaultFiles());
     }
 
+    @BddPrerequisiteSpec(Scope.GLOBAL)
     private HapiSpec ensureSystemStateAsExpectedWithSystemDefaultFiles() {
         final var emptyKey =
                 Key.newBuilder().setKeyList(KeyList.getDefaultInstance()).build();
@@ -80,8 +83,8 @@ public class TargetNetworkPrep extends HapiSuite {
         final AtomicReference<FeeObject> feeObs = new AtomicReference<>();
         try {
             final var defaultPermissionsLoc = "src/main/resource/api-permission.properties";
-            final var stylized121 =
-                    Files.readString(relocatedIfNotPresentInWorkingDir(Paths.get(defaultPermissionsLoc)));
+            final var stylized121 = Files.readString(
+                    ResourceLocator.relocatedIfNotPresentInWorkingDir(Paths.get(defaultPermissionsLoc)));
             final var serde = StandardSerdes.SYS_FILE_SERDES.get(122L);
 
             return defaultHapiSpec("ensureSystemStateAsExpectedWithSystemDefaultFiles")

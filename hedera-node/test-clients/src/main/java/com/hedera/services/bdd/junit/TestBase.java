@@ -59,7 +59,8 @@ public abstract class TestBase {
 
     @SafeVarargs
     protected final DynamicTest concurrentEthSpecsFrom(final Supplier<HapiSuite>... suiteSuppliers) {
-        return internalSpecsFrom(ETH_SUFFIX, Arrays.asList(suiteSuppliers), this::contextualizedEthSpecsFromConcurrent);
+        return internalSpecsFrom(
+                ETH_SUFFIX, Arrays.asList(suiteSuppliers), TestBase::contextualizedEthSpecsFromConcurrent);
     }
 
     @SuppressWarnings("java:S3864")
@@ -173,7 +174,7 @@ public abstract class TestBase {
         return suffixContextualizedSpecsFromConcurrent(suite, "");
     }
 
-    private Stream<HapiSpec> contextualizedEthSpecsFromConcurrent(final HapiSuite suite) {
+    private static Stream<HapiSpec> contextualizedEthSpecsFromConcurrent(final HapiSuite suite) {
         return suffixContextualizedSpecsFromConcurrent(suite, ETH_SUFFIX);
     }
 
@@ -195,7 +196,7 @@ public abstract class TestBase {
      * @param suiteSupplier
      * @return
      */
-    protected final DynamicContainer extractSpecsFromSuite(final Supplier<HapiSuite> suiteSupplier) {
+    protected DynamicContainer extractSpecsFromSuite(final Supplier<HapiSuite> suiteSupplier) {
         final var suite = suiteSupplier.get();
         final var tests = suite.getSpecsInSuiteWithOverrides().stream()
                 .map(s -> dynamicTest(s.getName(), () -> {
@@ -215,7 +216,7 @@ public abstract class TestBase {
         return dynamicContainer(suite.getClass().getSimpleName(), tests);
     }
 
-    protected final DynamicContainer extractSpecsFromSuiteForEth(final Supplier<HapiSuite> suiteSupplier) {
+    protected DynamicContainer extractSpecsFromSuiteForEth(final Supplier<HapiSuite> suiteSupplier) {
         final var suite = suiteSupplier.get();
         final var tests = suite.getSpecsInSuiteWithOverrides().stream()
                 .map(s -> dynamicTest(s.getName() + ETH_SUFFIX, () -> {

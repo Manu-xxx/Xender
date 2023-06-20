@@ -95,6 +95,7 @@ import com.hedera.services.bdd.suites.token.TokenManagementSpecs;
 import com.hedera.services.bdd.suites.token.TokenPauseSpecs;
 import com.hedera.services.bdd.suites.token.TokenTransactSpecs;
 import com.hedera.services.bdd.suites.token.TokenUpdateSpecs;
+import com.hedera.services.bdd.suites.tools.annotation.BddSpecTransformer;
 import com.hederahashgraph.api.proto.java.HederaFunctionality;
 import java.util.Map;
 import java.util.Set;
@@ -203,6 +204,7 @@ public class ConcurrentSuites {
      * @param functions the functions to auto-schedule
      * @return the wrapped suite supplier
      */
+    @BddSpecTransformer
     private static Supplier<HapiSuite> withAutoScheduling(
             final Supplier<HapiSuite> suiteSupplier, final Set<HederaFunctionality> functions) {
         return () -> {

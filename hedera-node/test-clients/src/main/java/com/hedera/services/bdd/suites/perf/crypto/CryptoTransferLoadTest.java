@@ -35,17 +35,17 @@ import static com.hederahashgraph.api.proto.java.ResponseCodeEnum.UNKNOWN;
 
 import com.hedera.services.bdd.spec.HapiSpec;
 import com.hedera.services.bdd.spec.HapiSpecOperation;
-import com.hedera.services.bdd.spec.utilops.LoadTest;
 import com.hedera.services.bdd.suites.perf.PerfTestLoadSettings;
+import com.hedera.services.bdd.suites.tools.annotation.BddPrerequisiteSpec;
+import com.hedera.services.bdd.suites.tools.annotation.BddPrerequisiteSpec.Scope;
 import java.util.List;
 import java.util.Random;
 import java.util.function.Supplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class CryptoTransferLoadTest extends LoadTest {
+public class CryptoTransferLoadTest extends AbstractCryptoTransferLoadTest {
     private static final Logger log = LogManager.getLogger(CryptoTransferLoadTest.class);
-    private Random r = new Random();
     private static final long TEST_ACCOUNT_STARTS_FROM = 1001L;
 
     public static void main(String... args) {
@@ -60,8 +60,10 @@ public class CryptoTransferLoadTest extends LoadTest {
         return List.of(runCryptoTransfers());
     }
 
-    protected HapiSpec runCryptoTransfers() {
+    @BddPrerequisiteSpec(Scope.SUITE)
+    public static HapiSpec runCryptoTransfers() {
         PerfTestLoadSettings settings = new PerfTestLoadSettings();
+        final var r = new Random();
 
         Supplier<HapiSpecOperation[]> transferBurst = () -> {
             String sender = "sender";
