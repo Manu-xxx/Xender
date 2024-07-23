@@ -38,4 +38,5 @@ dependencies {
     implementation("org.gradlex:extra-java-module-info:1.8")
     implementation("org.gradlex:jvm-dependency-conflict-resolution:2.0")
     implementation("org.gradlex:java-module-dependencies:1.6.5")
+    implementation("org.web3j.solidity:solidity-gradle-plugin:0.5.0")
 }

@@ -56,12 +56,7 @@ abstract class GitClone : DefaultTask() {
             exec.exec {
                 if (!localClone.dir(".git").asFile.exists()) {
                     workingDir = localClone.asFile.parentFile
-                    commandLine(
-                        "git",
-                        "clone",
-                        "https://github.com/hashgraph/hedera-protobufs.git",
-                        "-q"
-                    )
+                    commandLine("git", "clone", url.get(), "-q")
                 } else {
                     workingDir = localClone.asFile
                     commandLine("git", "fetch", "-q")
