@@ -15,8 +15,8 @@
  */
 
 plugins {
-    id("com.hedera.gradle.protobuf")
-    id("com.hedera.gradle.services-publish")
+    id("com.hedera.gradle.module.library")
+    id("com.hedera.gradle.feature.protobuf")
     id("com.hedera.gradle.feature.test-fixtures")
     id("com.hedera.pbj.pbj-compiler") version "0.9.2"
 }

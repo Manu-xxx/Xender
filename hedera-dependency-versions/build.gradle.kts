@@ -15,7 +15,8 @@
  */
 
 plugins {
-    id("com.hedera.gradle.versions")
+    id("com.hedera.gradle.base.lifecycle")
+    id("com.hedera.gradle.base.jpms-modules")
 }
 
 dependencies {
