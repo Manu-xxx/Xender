@@ -173,6 +173,15 @@ public class DefaultTransactionHandler implements TransactionHandler {
             return null;
         }
 
+        // Debug logging
+        final PlatformStateAccessor stateAccessor = swirldStateManager.getConsensusState().getPlatformState();
+        logger.info(STARTUP.getMarker(),
+                "Freeze Time in round {}: {}, Consensus Timestamp of round {}: {}",
+                stateAccessor.getRound(),
+                stateAccessor.getFreezeTime(),
+                consensusRound.getRoundNum(),
+                consensusRound.getConsensusTimestamp());
+
         if (swirldStateManager.isInFreezePeriod(consensusRound.getConsensusTimestamp())) {
             statusActionSubmitter.submitStatusAction(new FreezePeriodEnteredAction(consensusRound.getRoundNum()));
             freezeRoundReceived = true;
