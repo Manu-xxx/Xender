@@ -19,7 +19,9 @@ package com.hedera.node.app.service.networkadmin.impl.handlers;
 import static com.hedera.hapi.node.base.ResponseCodeEnum.INVALID_TRANSACTION_ID;
 import static com.hedera.hapi.node.base.ResponseCodeEnum.OK;
 import static com.hedera.hapi.node.base.ResponseCodeEnum.RECEIPT_NOT_FOUND;
+import static com.hedera.hapi.node.base.ResponseCodeEnum.THROTTLED_AT_CONSENSUS;
 import static com.hedera.hapi.node.base.ResponseType.COST_ANSWER;
+import static com.hederahashgraph.api.proto.java.HederaFunctionality.TransactionGetReceipt;
 import static java.util.Objects.requireNonNull;
 
 import com.hedera.hapi.node.base.HederaFunctionality;
@@ -93,6 +95,12 @@ public class NetworkTransactionGetReceiptHandler extends FreeQueryHandler {
                     ? transactionId.copyBuilder().nonce(0).build()
                     : transactionId;
             final var history = recordCache.getHistory(topLevelTxnId);
+            if (context.query().hasTransactionGetReceipt()) {
+                responseBuilder.header(header.copyBuilder()
+                        .nodeTransactionPrecheckCode(THROTTLED_AT_CONSENSUS)
+                        .build());
+                return Response.newBuilder().transactionGetReceipt(responseBuilder).build();
+            }
             if (history == null) {
                 // We only return RECEIPT_NOT_FOUND if we have never heard of this transaction.
                 responseBuilder.header(header.copyBuilder()
