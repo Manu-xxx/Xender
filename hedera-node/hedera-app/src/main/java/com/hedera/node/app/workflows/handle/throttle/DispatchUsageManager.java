@@ -44,6 +44,7 @@ import com.hedera.node.config.data.ContractsConfig;
 import com.swirlds.state.spi.info.NetworkInfo;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import java.util.EnumSet;
+import java.util.Random;
 import java.util.Set;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -85,6 +86,10 @@ public class DispatchUsageManager {
             throttleServiceManager.resetThrottlesUnconditionally(readableStates);
             final var isThrottled =
                     networkUtilizationManager.trackTxn(dispatch.txnInfo(), dispatch.consensusNow(), dispatch.stack());
+            if (dispatch.txnInfo().functionality().equals(HederaFunctionality.TRANSACTION_GET_RECEIPT)) {
+                throw ThrottleException.newNativeThrottleException();
+            }
+
             if (networkUtilizationManager.wasLastTxnGasThrottled()) {
                 throw ThrottleException.newGasThrottleException();
             } else if (isThrottled) {
@@ -102,6 +107,7 @@ public class DispatchUsageManager {
         if (CONTRACT_OPERATIONS.contains(function)) {
             leakUnusedGas(dispatch);
         }
+
         if (dispatch.txnCategory() == USER && dispatch.recordBuilder().status() != SUCCESS) {
             if (canAutoCreate(function)) {
                 reclaimFailedCryptoCreateCapacity(dispatch);
