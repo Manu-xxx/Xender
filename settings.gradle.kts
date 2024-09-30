@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-pluginManagement { includeBuild("gradle/plugins") }
+pluginManagement { includeBuild("hedera-gradle-conventions") } // TO BE REMOVED
 
-plugins { id("com.hedera.gradle.settings") }
+plugins { id("com.hedera.gradle.build") version "0.1.0" }
 
 javaModules {
     // This "intermediate parent project" should be removed
