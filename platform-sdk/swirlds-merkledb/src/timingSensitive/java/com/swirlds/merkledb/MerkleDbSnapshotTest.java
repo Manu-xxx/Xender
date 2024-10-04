@@ -17,6 +17,7 @@
 package com.swirlds.merkledb;
 
 import static com.swirlds.common.test.fixtures.AssertionUtils.assertEventuallyTrue;
+import static com.swirlds.merkledb.test.fixtures.MerkleDbTestUtils.config;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -27,7 +28,6 @@ import com.swirlds.common.crypto.DigestType;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.common.io.streams.MerkleDataInputStream;
 import com.swirlds.common.io.streams.MerkleDataOutputStream;
-import com.swirlds.common.io.utility.LegacyTemporaryFileBuilder;
 import com.swirlds.common.merkle.MerkleInternal;
 import com.swirlds.common.merkle.crypto.MerkleCryptoFactory;
 import com.swirlds.common.merkle.impl.PartialNaryMerkleInternal;
@@ -36,6 +36,7 @@ import com.swirlds.common.metrics.platform.DefaultPlatformMetrics;
 import com.swirlds.common.metrics.platform.MetricKeyRegistry;
 import com.swirlds.common.metrics.platform.PlatformMetricsFactoryImpl;
 import com.swirlds.common.test.fixtures.AssertionUtils;
+import com.swirlds.common.test.fixtures.TestFileSystemManager;
 import com.swirlds.config.api.Configuration;
 import com.swirlds.config.extensions.test.fixtures.TestConfigBuilder;
 import com.swirlds.merkledb.config.MerkleDbConfig;
@@ -63,6 +64,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.CleanupMode;
+import org.junit.jupiter.api.io.TempDir;
 
 class MerkleDbSnapshotTest {
 
@@ -77,6 +80,11 @@ class MerkleDbSnapshotTest {
     private static final ValueSerializer<ExampleFixedSizeVirtualValue> valueSerializer =
             new ExampleFixedSizeVirtualValueSerializer();
 
+    @TempDir(cleanup = CleanupMode.NEVER)
+    private Path tempDirectory;
+
+    private TestFileSystemManager testFileSystemManager;
+
     @BeforeAll
     static void setup() throws Exception {
         ConstructableRegistry.getInstance().registerConstructables("com.swirlds.common");
@@ -86,7 +94,8 @@ class MerkleDbSnapshotTest {
 
     @BeforeEach
     void setupTest() throws Exception {
-        MerkleDb.setDefaultPath(LegacyTemporaryFileBuilder.buildTemporaryDirectory("MerkleDbSnapshotTest"));
+        this.testFileSystemManager = new TestFileSystemManager(tempDirectory);
+        MerkleDb.setDefaultPath(testFileSystemManager.resolve(Path.of("MerkleDbSnapshotTest")));
     }
 
     @AfterEach
@@ -129,8 +138,8 @@ class MerkleDbSnapshotTest {
             initialRoot.setChild(i, vm);
         }
 
-        final Path snapshotDir = LegacyTemporaryFileBuilder.buildTemporaryDirectory("snapshotSync");
-        final Path snapshotFile = snapshotDir.resolve("state.swh");
+        final Path snapshotDir = Files.createDirectories(testFileSystemManager.resolve(Path.of("snapshotAsync")));
+        final Path snapshotFile = Files.createFile(snapshotDir.resolve("state.swh"));
 
         final AtomicReference<MerkleInternal> lastRoot = new AtomicReference<>();
         MerkleInternal stateRoot = initialRoot;
@@ -150,7 +159,7 @@ class MerkleDbSnapshotTest {
             if (j == ITERATIONS / 2) {
                 MerkleCryptoFactory.getInstance().digestTreeSync(stateRoot);
                 final MerkleDataOutputStream out = new MerkleDataOutputStream(
-                        Files.newOutputStream(snapshotFile, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE));
+                        Files.newOutputStream(snapshotFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE));
                 out.writeMerkleTree(snapshotDir, stateRoot);
             }
             stateRoot.release();
@@ -158,7 +167,7 @@ class MerkleDbSnapshotTest {
         }
         lastRoot.set(stateRoot);
 
-        MerkleDb.resetDefaultInstancePath();
+        MerkleDb.setDefaultPath(testFileSystemManager.resolve(Path.of("merkledb")));
         final MerkleDataInputStream in =
                 new MerkleDataInputStream(Files.newInputStream(snapshotFile, StandardOpenOption.READ));
         final MerkleInternal restoredStateRoot = in.readMerkleTree(snapshotDir, Integer.MAX_VALUE);
@@ -220,14 +229,14 @@ class MerkleDbSnapshotTest {
         assertEventuallyTrue(() -> lastRoot.get() != null, Duration.ofSeconds(10), "lastRoot is null");
 
         MerkleCryptoFactory.getInstance().digestTreeSync(rootToSnapshot.get());
-        final Path snapshotDir = LegacyTemporaryFileBuilder.buildTemporaryDirectory("snapshotAsync");
-        final Path snapshotFile = snapshotDir.resolve("state.swh");
+        final Path snapshotDir = Files.createDirectories(testFileSystemManager.resolve(Path.of("snapshotAsync")));
+        final Path snapshotFile = Files.createFile(snapshotDir.resolve("state.swh"));
         final MerkleDataOutputStream out = new MerkleDataOutputStream(
-                Files.newOutputStream(snapshotFile, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE));
+                Files.newOutputStream(snapshotFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE));
         out.writeMerkleTree(snapshotDir, rootToSnapshot.get());
         rootToSnapshot.get().release();
 
-        MerkleDb.resetDefaultInstancePath();
+        MerkleDb.setDefaultPath(testFileSystemManager.resolve(Path.of("merkledb")));
         final MerkleDataInputStream in =
                 new MerkleDataInputStream(Files.newInputStream(snapshotFile, StandardOpenOption.READ));
         final MerkleInternal restoredStateRoot = in.readMerkleTree(snapshotDir, Integer.MAX_VALUE);
@@ -257,15 +266,15 @@ class MerkleDbSnapshotTest {
     void testSnapshotAfterReconnect() throws Exception {
         final MerkleDbTableConfig tableConfig = fixedConfig();
         final MerkleDbDataSourceBuilder dsBuilder = new MerkleDbDataSourceBuilder(tableConfig);
-        final VirtualDataSource original = dsBuilder.build("vm", false);
+        final VirtualDataSource original = dsBuilder.build("vm", false, config());
         // Simulate reconnect as a learner
         final VirtualDataSource copy = dsBuilder.copy(original, true);
 
         try {
-            final Path snapshotDir = LegacyTemporaryFileBuilder.buildTemporaryDirectory("snapshot");
+            final Path snapshotDir = testFileSystemManager.resolve(Path.of("snapshot"));
             dsBuilder.snapshot(snapshotDir, copy);
 
-            final Path oldSnapshotDir = LegacyTemporaryFileBuilder.buildTemporaryDirectory("oldSnapshot");
+            final Path oldSnapshotDir = testFileSystemManager.resolve(Path.of("oldSnapshot"));
             assertDoesNotThrow(() -> dsBuilder.snapshot(oldSnapshotDir, original));
         } finally {
             original.close();
