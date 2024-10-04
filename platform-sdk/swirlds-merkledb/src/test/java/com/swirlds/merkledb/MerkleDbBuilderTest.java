@@ -16,6 +16,7 @@
 
 package com.swirlds.merkledb;
 
+import static com.swirlds.merkledb.test.fixtures.MerkleDbTestUtils.CONFIGURATION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,7 +40,7 @@ class MerkleDbBuilderTest {
 
     @BeforeAll
     static void setup() throws IOException {
-        testDirectory = LegacyTemporaryFileBuilder.buildTemporaryFile("MerkleDbBuilderTest");
+        testDirectory = LegacyTemporaryFileBuilder.buildTemporaryFile("MerkleDbBuilderTest", CONFIGURATION);
     }
 
     @AfterEach
@@ -49,14 +50,15 @@ class MerkleDbBuilderTest {
     }
 
     private MerkleDbTableConfig createTableConfig() {
-        return new MerkleDbTableConfig((short) 1, DigestType.SHA_384);
+        return new MerkleDbTableConfig(
+                (short) 1, DigestType.SHA_384, CONFIGURATION.getConfigData(MerkleDbConfig.class));
     }
 
     @Test
     @DisplayName("Test table config is passed to data source")
     public void testTableConfig() throws IOException {
         final MerkleDbTableConfig tableConfig = createTableConfig();
-        final MerkleDbDataSourceBuilder builder = new MerkleDbDataSourceBuilder(tableConfig);
+        final MerkleDbDataSourceBuilder builder = new MerkleDbDataSourceBuilder(tableConfig, CONFIGURATION);
         VirtualDataSource dataSource = null;
         try {
             dataSource = builder.build("test1", false);
@@ -74,8 +76,8 @@ class MerkleDbBuilderTest {
     @DisplayName("Test data source config defaults")
     public void testBuilderDefaults() throws IOException {
         final MerkleDbTableConfig tableConfig = createTableConfig();
-        final MerkleDbDataSourceBuilder builder = new MerkleDbDataSourceBuilder(tableConfig);
-        final MerkleDb defaultDatabase = MerkleDb.getDefaultInstance();
+        final MerkleDbDataSourceBuilder builder = new MerkleDbDataSourceBuilder(tableConfig, CONFIGURATION);
+        final MerkleDb defaultDatabase = MerkleDb.getDefaultInstance(CONFIGURATION);
         VirtualDataSource dataSource = null;
         try {
             dataSource = builder.build("test2", false);
@@ -107,7 +109,7 @@ class MerkleDbBuilderTest {
     public void testBuilderOverrides() throws IOException {
         final MerkleDbTableConfig tableConfig = createTableConfig();
         tableConfig.preferDiskIndices(true).maxNumberOfKeys(1999).hashesRamToDiskThreshold(Integer.MAX_VALUE >> 4);
-        final MerkleDbDataSourceBuilder builder = new MerkleDbDataSourceBuilder(tableConfig);
+        final MerkleDbDataSourceBuilder builder = new MerkleDbDataSourceBuilder(tableConfig, CONFIGURATION);
         final Path defaultDbPath = testDirectory.resolve("defaultDatabasePath");
         MerkleDb.setDefaultPath(defaultDbPath);
         VirtualDataSource dataSource = null;

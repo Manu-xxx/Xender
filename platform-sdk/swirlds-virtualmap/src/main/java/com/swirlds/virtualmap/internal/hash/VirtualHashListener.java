@@ -25,14 +25,17 @@ import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
  * Listens to various events that occur during the hashing process.
  */
 public interface VirtualHashListener<K extends VirtualKey, V extends VirtualValue> {
+
     /**
      * Called when starting a new fresh hash operation.
+     *
+     * @param reconnectFlushInterval the number of nodes to hash before they are flushed to disk
      */
-    default void onHashingStarted() {}
+    default void onHashingStarted(int reconnectFlushInterval) {}
 
     /**
      * Called after each node is hashed, internal or leaf. This is called between
-     * {@link #onHashingStarted()} and {@link #onHashingCompleted()}.
+     * {@link #onHashingStarted(int)} and {@link #onHashingCompleted()}.
      *
      * @param path
      * 		Node path
@@ -43,7 +46,7 @@ public interface VirtualHashListener<K extends VirtualKey, V extends VirtualValu
 
     /**
      * Called after each leaf node on a rank is hashed. This is called between
-     * {@link #onHashingStarted()} and {@link #onHashingCompleted()}.
+     * {@link #onHashingStarted(int)} and {@link #onHashingCompleted()}.
      *
      * @param leaf
      * 		A non-null leaf record representing the hashed leaf.

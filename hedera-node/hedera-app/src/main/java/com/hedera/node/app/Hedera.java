@@ -455,6 +455,7 @@ public final class Hedera implements SwirldMain, PlatformStatusChangeListener {
                 deserializedVersion == null ? null : new ServicesSoftwareVersion(deserializedVersion),
                 version,
                 bootstrapConfigProvider.getConfiguration(),
+                null,
                 UNAVAILABLE_NETWORK_INFO,
                 UNAVAILABLE_METRICS);
     }
@@ -570,6 +571,7 @@ public final class Hedera implements SwirldMain, PlatformStatusChangeListener {
                 deserializedVersion,
                 version,
                 configProvider.getConfiguration(),
+                platform.getContext().getConfiguration(),
                 networkInfo,
                 metrics);
         migrationStateChanges.addAll(migrationChanges);

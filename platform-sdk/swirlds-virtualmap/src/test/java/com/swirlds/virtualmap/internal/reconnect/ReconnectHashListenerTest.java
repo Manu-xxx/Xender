@@ -16,6 +16,7 @@
 
 package com.swirlds.virtualmap.internal.reconnect;
 
+import static com.swirlds.virtualmap.test.fixtures.VirtualMapTestUtils.CONFIGURATION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -26,6 +27,7 @@ import com.swirlds.common.crypto.Cryptography;
 import com.swirlds.common.crypto.CryptographyHolder;
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.metrics.api.Metrics;
+import com.swirlds.virtualmap.config.VirtualMapConfig;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualHashRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafBytes;
@@ -122,7 +124,12 @@ class ReconnectHashListenerTest {
                 size, last, TestKeySerializer.INSTANCE, TestValueSerializer.INSTANCE, ds, remover);
         final VirtualHasher<TestKey, TestValue> hasher = new VirtualHasher<>();
         hasher.hash(
-                this::hash, LongStream.range(size, last).mapToObj(this::leaf).iterator(), size, last, listener);
+                this::hash,
+                LongStream.range(size, last).mapToObj(this::leaf).iterator(),
+                size,
+                last,
+                listener,
+                CONFIGURATION.getConfigData(VirtualMapConfig.class));
 
         // Now validate that everything showed up the data source in ordered chunks
         final TreeSet<VirtualHashRecord> allInternalRecords =

@@ -16,11 +16,11 @@
 
 package com.swirlds.virtualmap.internal.merkle;
 
-import com.swirlds.common.config.singleton.ConfigurationHolder;
+import static java.util.Objects.requireNonNull;
+
 import com.swirlds.common.crypto.Hash;
 import com.swirlds.virtualmap.VirtualKey;
 import com.swirlds.virtualmap.VirtualValue;
-import com.swirlds.virtualmap.config.VirtualMapConfig;
 import com.swirlds.virtualmap.datasource.VirtualDataSource;
 import com.swirlds.virtualmap.datasource.VirtualHashRecord;
 import com.swirlds.virtualmap.datasource.VirtualLeafRecord;
@@ -34,7 +34,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
@@ -116,18 +115,17 @@ public abstract class AbstractHashListener<K extends VirtualKey, V extends Virtu
 
         this.firstLeafPath = firstLeafPath;
         this.lastLeafPath = lastLeafPath;
-        this.keySerializer = Objects.requireNonNull(keySerializer);
-        this.valueSerializer = Objects.requireNonNull(valueSerializer);
-        this.dataSource = Objects.requireNonNull(dataSource);
+        this.keySerializer = requireNonNull(keySerializer);
+        this.valueSerializer = requireNonNull(valueSerializer);
+        this.dataSource = requireNonNull(dataSource);
     }
 
     @Override
-    public synchronized void onHashingStarted() {
+    public synchronized void onHashingStarted(int reconnectFlushInterval) {
         assert (hashes == null) && (leaves == null) : "Hashing must not be started yet";
         hashes = new ArrayList<>();
         leaves = new ArrayList<>();
-        reconnectFlushInterval =
-                ConfigurationHolder.getConfigData(VirtualMapConfig.class).reconnectFlushInterval();
+        this.reconnectFlushInterval = reconnectFlushInterval;
     }
 
     /**
