@@ -72,12 +72,10 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.function.Function;
 import javax.inject.Inject;
-import javax.inject.Singleton;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /** Implementation of {@link QueryWorkflow} */
-@Singleton
 public final class QueryWorkflowImpl implements QueryWorkflow {
 
     private static final Logger logger = LogManager.getLogger(QueryWorkflowImpl.class);
@@ -103,6 +101,11 @@ public final class QueryWorkflowImpl implements QueryWorkflow {
     private final InstantSource instantSource;
 
     /**
+     * Indicates if the QueryWorkflow should charge for handling queries.
+     */
+    private final boolean shouldCharge;
+
+    /**
      * Constructor of {@code QueryWorkflowImpl}
      *
      * @param stateAccessor a {@link Function} that returns the latest immutable or latest signed state depending on the
@@ -119,6 +122,7 @@ public final class QueryWorkflowImpl implements QueryWorkflow {
      * @param feeManager the {@link FeeManager} to calculate the fees
      * @param synchronizedThrottleAccumulator the {@link SynchronizedThrottleAccumulator} that checks transaction should be throttled
      * @param instantSource the {@link InstantSource} to get the current time
+     * @param shouldCharge If the workflow should charge for handling queries.
      * @throws NullPointerException if one of the arguments is {@code null}
      */
     @Inject
@@ -135,7 +139,8 @@ public final class QueryWorkflowImpl implements QueryWorkflow {
             @NonNull final ExchangeRateManager exchangeRateManager,
             @NonNull final FeeManager feeManager,
             @NonNull final SynchronizedThrottleAccumulator synchronizedThrottleAccumulator,
-            @NonNull final InstantSource instantSource) {
+            @NonNull final InstantSource instantSource,
+            final boolean shouldCharge) {
         this.stateAccessor = requireNonNull(stateAccessor, "stateAccessor must not be null");
         this.submissionManager = requireNonNull(submissionManager, "submissionManager must not be null");
         this.ingestChecker = requireNonNull(ingestChecker, "ingestChecker must not be null");
@@ -150,6 +155,7 @@ public final class QueryWorkflowImpl implements QueryWorkflow {
         this.synchronizedThrottleAccumulator =
                 requireNonNull(synchronizedThrottleAccumulator, "hapiThrottling must not be null");
         this.instantSource = requireNonNull(instantSource);
+        this.shouldCharge = shouldCharge;
     }
 
     @Override
@@ -190,7 +196,7 @@ public final class QueryWorkflowImpl implements QueryWorkflow {
                 Transaction allegedPayment;
                 TransactionBody txBody;
                 AccountID payerID = null;
-                if (paymentRequired) {
+                if (shouldCharge && paymentRequired) {
                     allegedPayment = queryHeader.paymentOrElse(Transaction.DEFAULT);
                     final var configuration = configProvider.getConfiguration();
 
@@ -257,7 +263,7 @@ public final class QueryWorkflowImpl implements QueryWorkflow {
                 handler.validate(context);
 
                 // 5. Check query throttles
-                if (synchronizedThrottleAccumulator.shouldThrottle(function, query, payerID)) {
+                if (shouldCharge && synchronizedThrottleAccumulator.shouldThrottle(function, query, payerID)) {
                     throw new PreCheckException(BUSY);
                 }
 
