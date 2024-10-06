@@ -17,18 +17,25 @@
 package com.hedera.node.app.blocks.impl;
 
 import static com.hedera.hapi.util.HapiUtils.asTimestamp;
+import static com.hedera.node.app.blocks.BlockStreamManager.Boundary.BLOCK;
+import static com.hedera.node.app.blocks.BlockStreamManager.Boundary.NONE;
 import static com.hedera.node.app.blocks.BlockStreamManager.ZERO_BLOCK_HASH;
 import static com.hedera.node.app.blocks.BlockStreamService.FAKE_RESTART_BLOCK_HASH;
 import static com.hedera.node.app.blocks.impl.BlockImplUtils.appendHash;
 import static com.hedera.node.app.blocks.impl.BlockImplUtils.combine;
+import static com.hedera.node.app.blocks.impl.BlockStreamManagerImpl.impliesPostUpgradeWorkPending;
 import static com.hedera.node.app.blocks.schemas.V0540BlockStreamSchema.BLOCK_STREAM_INFO_KEY;
 import static com.hedera.node.app.fixtures.AppTestBase.DEFAULT_CONFIG;
 import static com.hedera.node.app.hapi.utils.CommonUtils.noThrowSha384HashOf;
+import static com.hedera.node.app.records.BlockRecordService.EPOCH;
 import static com.swirlds.platform.state.service.schemas.V0540PlatformStateSchema.PLATFORM_STATE_KEY;
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -89,6 +96,7 @@ class BlockStreamManagerImplTest {
     private static final long N_MINUS_1_BLOCK_NO = 665L;
     private static final long N_BLOCK_NO = 666L;
     private static final Instant CONSENSUS_NOW = Instant.ofEpochSecond(1_234_567L);
+    private static final Timestamp CONSENSUS_THEN = new Timestamp(890, 0);
     private static final Hash FAKE_START_OF_BLOCK_STATE_HASH = new Hash(new byte[48]);
     private static final Bytes N_MINUS_2_BLOCK_HASH = Bytes.wrap(noThrowSha384HashOf(new byte[] {(byte) 0xAA}));
     private static final Bytes FIRST_FAKE_SIGNATURE = Bytes.fromHex("ff".repeat(48));
@@ -148,6 +156,61 @@ class BlockStreamManagerImplTest {
     }
 
     @Test
+    void genesisBlockHasNoPostUpgradeWork() {
+        assertFalse(impliesPostUpgradeWorkPending(BlockStreamInfo.DEFAULT, SemanticVersion.DEFAULT));
+    }
+
+    @Test
+    void nonGenesisBlockOfPriorVersionHasPostUpgradeWork() {
+        assertTrue(impliesPostUpgradeWorkPending(
+                BlockStreamInfo.newBuilder()
+                        .creationSoftwareVersion(
+                                SemanticVersion.newBuilder().major(1).build())
+                        .blockTime(new Timestamp(1234567, 890))
+                        .build(),
+                SemanticVersion.newBuilder().major(2).build()));
+    }
+
+    @Test
+    void nonGenesisBlockOfSameVersionWithWorkNotDoneStillHasPostUpgradeWork() {
+        assertTrue(impliesPostUpgradeWorkPending(
+                BlockStreamInfo.newBuilder()
+                        .creationSoftwareVersion(
+                                SemanticVersion.newBuilder().major(1).build())
+                        .blockTime(new Timestamp(1234567, 890))
+                        .build(),
+                SemanticVersion.newBuilder().major(1).build()));
+    }
+
+    @Test
+    void nonGenesisBlockOfSameVersionWithWorkDoneHasNoPostUpgradeWork() {
+        assertFalse(impliesPostUpgradeWorkPending(
+                BlockStreamInfo.newBuilder()
+                        .postUpgradeWorkDone(true)
+                        .creationSoftwareVersion(
+                                SemanticVersion.newBuilder().major(1).build())
+                        .blockTime(new Timestamp(1234567, 890))
+                        .build(),
+                SemanticVersion.newBuilder().major(1).build()));
+    }
+
+    @Test
+    void canUpdateIntervalProcessTime() {
+        given(configProvider.getConfiguration()).willReturn(new VersionedConfigImpl(DEFAULT_CONFIG, 1L));
+        subject = new BlockStreamManagerImpl(
+                () -> aWriter,
+                ForkJoinPool.commonPool(),
+                configProvider,
+                tssBaseService,
+                boundaryStateChangeListener,
+                hashInfo,
+                SemanticVersion.DEFAULT);
+        assertSame(Instant.EPOCH, subject.lastIntervalProcessTime());
+        subject.setLastIntervalProcessTime(CONSENSUS_NOW);
+        assertEquals(CONSENSUS_NOW, subject.lastIntervalProcessTime());
+    }
+
+    @Test
     void requiresLastHashToBeInitialized() {
         given(configProvider.getConfiguration()).willReturn(new VersionedConfigImpl(DEFAULT_CONFIG, 1));
         subject = new BlockStreamManagerImpl(
@@ -156,7 +219,8 @@ class BlockStreamManagerImplTest {
                 configProvider,
                 tssBaseService,
                 boundaryStateChangeListener,
-                hashInfo);
+                hashInfo,
+                SemanticVersion.DEFAULT);
         assertThrows(IllegalStateException.class, () -> subject.startRound(round, state));
     }
 
@@ -164,7 +228,8 @@ class BlockStreamManagerImplTest {
     void startsAndEndsBlockWithSingleRoundPerBlockAsExpected() throws ParseException {
         givenSubjectWith(
                 1,
-                blockStreamInfoWith(N_MINUS_1_BLOCK_NO, N_MINUS_2_BLOCK_HASH, Bytes.EMPTY),
+                blockStreamInfoWith(
+                        Bytes.EMPTY, CREATION_VERSION.copyBuilder().patch(0).build()),
                 platformStateWith(null),
                 aWriter);
         givenEndOfRoundSetup();
@@ -177,6 +242,9 @@ class BlockStreamManagerImplTest {
 
         // Start the round that will be block N
         subject.startRound(round, state);
+        subject.confirmPostUpgradeWork();
+        // We don't fail hard on duplicate calls to confirm post-upgrade work
+        assertDoesNotThrow(() -> subject.confirmPostUpgradeWork());
 
         // Assert the internal state of the subject has changed as expected and the writer has been opened
         verify(boundaryStateChangeListener).setBoundaryTimestamp(CONSENSUS_NOW);
@@ -210,7 +278,10 @@ class BlockStreamManagerImplTest {
                                 "be03f18885e3fb5e26dae1ad95d6559b62092d2162342f376712fd00fa045aaedda06811a1548a916a26878752900473"),
                         Bytes.fromHex(
                                 "84910d7e7710b482680de1e81865de39396de9c536ab265cf3253bf378bc50ed2f6c5a3ec19a25c51ee170347f13b28d")),
-                Timestamp.DEFAULT);
+                Timestamp.DEFAULT,
+                true,
+                SemanticVersion.DEFAULT,
+                EPOCH);
         final var actualBlockInfo = infoRef.get();
         assertEquals(expectedBlockInfo, actualBlockInfo);
         verify(tssBaseService).requestLedgerSignature(blockHashCaptor.capture());
@@ -230,17 +301,15 @@ class BlockStreamManagerImplTest {
 
     @Test
     void doesNotEndBlockWithMultipleRoundPerBlockIfNotModZero() {
-        givenSubjectWith(
-                7,
-                blockStreamInfoWith(N_MINUS_1_BLOCK_NO, N_MINUS_2_BLOCK_HASH, Bytes.EMPTY),
-                platformStateWith(null),
-                aWriter);
+        givenSubjectWith(7, blockStreamInfoWith(Bytes.EMPTY, CREATION_VERSION), platformStateWith(null), aWriter);
 
         // Initialize the last (N-1) block hash
         subject.initLastBlockHash(FAKE_RESTART_BLOCK_HASH);
 
         // Start the round that will be block N
-        subject.startRound(round, state);
+        assertEquals(BLOCK, subject.startRound(round, state));
+        // Confirm calling twice doesn't recreate the writer
+        assertEquals(NONE, subject.startRound(round, state));
 
         // Assert the internal state of the subject has changed as expected and the writer has been opened
         verify(boundaryStateChangeListener).setBoundaryTimestamp(CONSENSUS_NOW);
@@ -266,7 +335,7 @@ class BlockStreamManagerImplTest {
         final var resultHashes = Bytes.fromHex("aa".repeat(48) + "bb".repeat(48) + "cc".repeat(48) + "dd".repeat(48));
         givenSubjectWith(
                 7,
-                blockStreamInfoWith(N_MINUS_1_BLOCK_NO, N_MINUS_2_BLOCK_HASH, resultHashes),
+                blockStreamInfoWith(resultHashes, CREATION_VERSION),
                 platformStateWith(CONSENSUS_NOW.minusSeconds(1)),
                 aWriter);
         givenEndOfRoundSetup();
@@ -315,7 +384,10 @@ class BlockStreamManagerImplTest {
                                 "be03f18885e3fb5e26dae1ad95d6559b62092d2162342f376712fd00fa045aaedda06811a1548a916a26878752900473"),
                         Bytes.fromHex(
                                 "84910d7e7710b482680de1e81865de39396de9c536ab265cf3253bf378bc50ed2f6c5a3ec19a25c51ee170347f13b28d")),
-                Timestamp.DEFAULT);
+                Timestamp.DEFAULT,
+                false,
+                SemanticVersion.DEFAULT,
+                EPOCH);
         final var actualBlockInfo = infoRef.get();
         assertEquals(expectedBlockInfo, actualBlockInfo);
         verify(tssBaseService).requestLedgerSignature(blockHashCaptor.capture());
@@ -336,11 +408,7 @@ class BlockStreamManagerImplTest {
     @Test
     void supportsMultiplePendingBlocksWithIndirectProofAsExpected() throws ParseException {
         givenSubjectWith(
-                1,
-                blockStreamInfoWith(N_MINUS_1_BLOCK_NO, N_MINUS_2_BLOCK_HASH, Bytes.EMPTY),
-                platformStateWith(null),
-                aWriter,
-                bWriter);
+                1, blockStreamInfoWith(Bytes.EMPTY, CREATION_VERSION), platformStateWith(null), aWriter, bWriter);
         givenEndOfRoundSetup();
         doAnswer(invocationOnMock -> {
                     lastBItem.set(invocationOnMock.getArgument(0));
@@ -424,7 +492,8 @@ class BlockStreamManagerImplTest {
                 configProvider,
                 tssBaseService,
                 boundaryStateChangeListener,
-                hashInfo);
+                hashInfo,
+                SemanticVersion.DEFAULT);
         given(state.getReadableStates(BlockStreamService.NAME)).willReturn(readableStates);
         given(state.getReadableStates(PlatformStateService.NAME)).willReturn(readableStates);
         infoRef.set(blockStreamInfo);
@@ -456,11 +525,13 @@ class BlockStreamManagerImplTest {
     }
 
     private BlockStreamInfo blockStreamInfoWith(
-            final long blockNumber, @NonNull final Bytes nMinus2Hash, @NonNull final Bytes resultHashes) {
+            @NonNull final Bytes resultHashes, @NonNull final SemanticVersion creationVersion) {
         return BlockStreamInfo.newBuilder()
-                .blockNumber(blockNumber)
-                .trailingBlockHashes(appendHash(nMinus2Hash, Bytes.EMPTY, 256))
+                .blockNumber(N_MINUS_1_BLOCK_NO)
+                .creationSoftwareVersion(creationVersion)
+                .trailingBlockHashes(appendHash(N_MINUS_2_BLOCK_HASH, Bytes.EMPTY, 256))
                 .trailingOutputHashes(resultHashes)
+                .blockTime(CONSENSUS_THEN)
                 .build();
     }
 

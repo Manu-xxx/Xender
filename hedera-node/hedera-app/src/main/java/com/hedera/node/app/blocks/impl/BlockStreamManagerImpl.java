@@ -18,10 +18,14 @@ package com.hedera.node.app.blocks.impl;
 
 import static com.hedera.hapi.node.base.BlockHashAlgorithm.SHA2_384;
 import static com.hedera.hapi.util.HapiUtils.asInstant;
+import static com.hedera.hapi.util.HapiUtils.asTimestamp;
+import static com.hedera.node.app.blocks.BlockStreamManager.Boundary.BLOCK;
+import static com.hedera.node.app.blocks.BlockStreamManager.Boundary.NONE;
 import static com.hedera.node.app.blocks.impl.BlockImplUtils.appendHash;
 import static com.hedera.node.app.blocks.impl.BlockImplUtils.combine;
 import static com.hedera.node.app.blocks.schemas.V0540BlockStreamSchema.BLOCK_STREAM_INFO_KEY;
 import static com.hedera.node.app.hapi.utils.CommonUtils.noThrowSha384HashOf;
+import static com.hedera.node.app.records.BlockRecordService.EPOCH;
 import static com.hedera.node.app.records.impl.BlockRecordInfoUtils.HASH_SIZE;
 import static com.swirlds.platform.state.SwirldStateManagerUtils.isInFreezePeriod;
 import static java.util.Objects.requireNonNull;
@@ -81,6 +85,7 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
 
     private final int roundsPerBlock;
     private final TssBaseService tssBaseService;
+    private final SemanticVersion version;
     private final SemanticVersion hapiVersion;
     private final ExecutorService executor;
     private final Supplier<BlockItemWriter> writerSupplier;
@@ -89,6 +94,28 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
     private final BlockHashManager blockHashManager;
     private final RunningHashManager runningHashManager;
 
+    /**
+     * The status of work to be done while handling the first post-upgrade transaction.
+     */
+    private enum PostUpgradeStatus {
+        /**
+         * The post-upgrade work status is unknown.
+         */
+        UNKNOWN,
+        /**
+         * The post-upgrade work is pending.
+         */
+        PENDING,
+        /**
+         * The post-upgrade work is finished.
+         */
+        FINISHED
+    }
+
+    // The status of post-upgrade work
+    private PostUpgradeStatus postUpgradeStatus = PostUpgradeStatus.UNKNOWN;
+    // The last time at which interval-based processing was done
+    private Instant lastIntervalProcessTime = Instant.EPOCH;
     // All this state is scoped to producing the current block
     private long blockNumber;
     // Set to the round number of the last round handled before entering a freeze period
@@ -140,7 +167,9 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
             @NonNull final ConfigProvider configProvider,
             @NonNull final TssBaseService tssBaseService,
             @NonNull final BoundaryStateChangeListener boundaryStateChangeListener,
-            @NonNull final InitialStateHash initialStateHash) {
+            @NonNull final InitialStateHash initialStateHash,
+            @NonNull final SemanticVersion version) {
+        this.version = requireNonNull(version);
         this.writerSupplier = requireNonNull(writerSupplier);
         this.executor = requireNonNull(executor);
         this.tssBaseService = requireNonNull(tssBaseService);
@@ -166,7 +195,7 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
     }
 
     @Override
-    public void startRound(@NonNull final Round round, @NonNull final State state) {
+    public Boundary startRound(@NonNull final Round round, @NonNull final State state) {
         if (lastBlockHash == null) {
             throw new IllegalStateException("Last block hash must be initialized before starting a round");
         }
@@ -187,6 +216,10 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
             boundaryStateChangeListener.setBoundaryTimestamp(blockTimestamp);
 
             final var blockStreamInfo = blockStreamInfoFrom(state);
+            postUpgradeStatus = impliesPostUpgradeWorkPending(blockStreamInfo, version)
+                    ? PostUpgradeStatus.PENDING
+                    : PostUpgradeStatus.FINISHED;
+            lastIntervalProcessTime = asInstant(blockStreamInfo.lastIntervalProcessTimeOrElse(EPOCH));
             blockHashManager.startBlock(blockStreamInfo, lastBlockHash);
             runningHashManager.startBlock(blockStreamInfo);
 
@@ -205,7 +238,29 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
                     .build());
 
             writer.openBlock(blockNumber);
+            return BLOCK;
+        } else {
+            return NONE;
         }
+    }
+
+    @Override
+    public void confirmPostUpgradeWork() {
+        if (postUpgradeStatus != PostUpgradeStatus.PENDING) {
+            // Should never happen but throwing IllegalStateException might make the situation even worse, so just log
+            log.error("HandleWorkflow confirmed post-upgrade work with existing status {}", postUpgradeStatus);
+        }
+        postUpgradeStatus = PostUpgradeStatus.FINISHED;
+    }
+
+    @Override
+    public @NonNull Instant lastIntervalProcessTime() {
+        return lastIntervalProcessTime;
+    }
+
+    @Override
+    public void setLastIntervalProcessTime(@NonNull final Instant lastIntervalProcessTime) {
+        this.lastIntervalProcessTime = requireNonNull(lastIntervalProcessTime);
     }
 
     @Override
@@ -237,7 +292,10 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
                     blockStartStateHash,
                     outputTreeStatus.numLeaves(),
                     outputTreeStatus.rightmostHashes(),
-                    boundaryStateChangeListener.boundaryTimestampOrThrow()));
+                    boundaryStateChangeListener.boundaryTimestampOrThrow(),
+                    postUpgradeStatus == PostUpgradeStatus.FINISHED,
+                    version,
+                    asTimestamp(lastIntervalProcessTime)));
             ((CommittableWritableStates) writableState).commit();
 
             // Flush the block stream info change
@@ -344,6 +402,23 @@ public class BlockStreamManagerImpl implements BlockStreamManager {
                 siblingHashes.removeFirst();
             }
         }
+    }
+
+    /**
+     * Determines if post-upgrade work is pending based on the given block stream info and version.
+     *
+     * @param blockStreamInfo the block stream info
+     * @param version the version
+     * @return true if post-upgrade work is pending, false otherwise
+     */
+    public static boolean impliesPostUpgradeWorkPending(
+            @NonNull final BlockStreamInfo blockStreamInfo, @NonNull final SemanticVersion version) {
+        requireNonNull(version);
+        requireNonNull(blockStreamInfo);
+        // The genesis block never has post-upgrade work pending
+        return !EPOCH.equals(blockStreamInfo.blockTimeOrElse(EPOCH))
+                && (!version.equals(blockStreamInfo.creationSoftwareVersion())
+                        || !blockStreamInfo.postUpgradeWorkDone());
     }
 
     private void schedulePendingWork() {
