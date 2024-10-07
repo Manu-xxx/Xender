@@ -94,7 +94,7 @@ dependencies.constraints {
     api("info.picocli:picocli:4.6.3") {
         because("info.picocli")
     }
-    api("io.github.classgraph:classgraph:4.8.65") {
+    api("io.github.classgraph:classgraph:4.8.177") {
         because("io.github.classgraph")
     }
     api("io.netty:netty-handler:4.1.110.Final") {
