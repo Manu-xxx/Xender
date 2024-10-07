@@ -169,7 +169,7 @@ dependencies.constraints {
     api("org.eclipse.collections:eclipse-collections:10.4.0") {
         because("org.eclipse.collections.impl")
     }
-    api("org.hamcrest:hamcrest:2.2") {
+    api("org.hamcrest:hamcrest:3.0") {
         because("org.hamcrest")
     }
     api("org.hyperledger.besu:besu-datatypes:24.3.3") {
