@@ -151,7 +151,7 @@ dependencies.constraints {
     api("org.apache.logging.log4j:log4j-core:2.21.1") {
         because("org.apache.logging.log4j.core")
     }
-    api("org.apache.logging.log4j:log4j-slf4j2-impl:2.21.1") {
+    api("org.apache.logging.log4j:log4j-slf4j2-impl:2.24.3") {
         because("org.apache.logging.log4j.slf4j2.impl")
     }
     api("org.assertj:assertj-core:3.23.1") {
