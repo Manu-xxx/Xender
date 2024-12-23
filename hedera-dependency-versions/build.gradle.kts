@@ -73,10 +73,10 @@ dependencies.constraints {
     api("net.java.dev.jna:jna:5.12.1") {
         because("com.sun.jna")
     }
-    api("com.google.dagger:dagger:2.42") {
+    api("com.google.dagger:dagger:2.54") {
         because("dagger")
     }
-    api("com.google.dagger:dagger-compiler:2.42") {
+    api("com.google.dagger:dagger-compiler:2.54") {
         because("dagger.compiler")
     }
     api("io.grpc:grpc-netty:1.64.0") {
